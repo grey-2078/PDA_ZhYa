@@ -2,6 +2,7 @@ import scrapy
 
 from books_project.models import save_book
 
+
 class BooksSpider(scrapy.Spider):
     name = "books"
     start_urls = [
@@ -21,6 +22,7 @@ class BooksSpider(scrapy.Spider):
         "https://openlibrary.org/search.json?q=book&limit=100&page=14",
         "https://openlibrary.org/search.json?q=book&limit=100&page=15",
     ]
+
     def parse(self, response):
         data = response.json()
         for book in data["docs"]:
@@ -32,5 +34,3 @@ class BooksSpider(scrapy.Spider):
             book_key = book.get("key")
             if title and book_key:
                 save_book(title, author, year, edition_count, book_key)
-
-
