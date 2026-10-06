@@ -26,6 +26,7 @@
     │   └── spiders/ 
     │       └── __init__.py     # Пустой файл, инициализирующий директорию как пакет Python 
     │       └── scraper.py      # Сбор данных с Open Library 
+    ├── zaprosiki.py            # Запросы 
     └── venv/ 
  ``` 
 

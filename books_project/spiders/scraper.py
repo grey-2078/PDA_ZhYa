@@ -5,23 +5,7 @@ from books_project.models import save_book
 
 class BooksSpider(scrapy.Spider):
     name = "books"
-    start_urls = [
-        "https://openlibrary.org/search.json?q=book&limit=100&page=1",
-        "https://openlibrary.org/search.json?q=book&limit=100&page=2",
-        "https://openlibrary.org/search.json?q=book&limit=100&page=3",
-        "https://openlibrary.org/search.json?q=book&limit=100&page=4",
-        "https://openlibrary.org/search.json?q=book&limit=100&page=5",
-        "https://openlibrary.org/search.json?q=book&limit=100&page=6",
-        "https://openlibrary.org/search.json?q=book&limit=100&page=7",
-        "https://openlibrary.org/search.json?q=book&limit=100&page=8",
-        "https://openlibrary.org/search.json?q=book&limit=100&page=9",
-        "https://openlibrary.org/search.json?q=book&limit=100&page=10",
-        "https://openlibrary.org/search.json?q=book&limit=100&page=11",
-        "https://openlibrary.org/search.json?q=book&limit=100&page=12",
-        "https://openlibrary.org/search.json?q=book&limit=100&page=13",
-        "https://openlibrary.org/search.json?q=book&limit=100&page=14",
-        "https://openlibrary.org/search.json?q=book&limit=100&page=15",
-    ]
+    start_urls = [f"https://openlibrary.org/search.json?q=book&limit=100&page={page}" for page in range(1, 16)]
 
     def parse(self, response):
         data = response.json()
