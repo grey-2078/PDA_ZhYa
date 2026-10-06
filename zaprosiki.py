@@ -1,7 +1,7 @@
 import pandas as pd
 from sqlalchemy.orm import Session
 from books_project.models import engine, Book
-
+from sqlalchemy import func, desc
 
 def main():
 
@@ -53,13 +53,16 @@ def main():
 
         df['popularity_segment'] = pd.cut(df['edition_count'].fillna(0), bins=bins, labels=labels)
 
+        # анализ сегментов: количество книг, % от общего числа и сумма всех переизданий
         segment_analysis = df.groupby('popularity_segment', observed=False).agg(
-            count=('book_key', 'count'),
-            avg_year=('year', 'mean')
+            books_count=('book_key', 'count'),
+            total_editions=('edition_count', 'sum')
         ).reset_index()
 
+        # добавляем долю от общего количества книг
+        total_books = len(df)
+        segment_analysis['share_pct'] = (segment_analysis['books_count'] / total_books * 100).round(1)
 
-        segment_analysis['avg_year'] = segment_analysis['avg_year'].round(0)
         print("\nкниги по популярности:\n", segment_analysis.to_string(index=False))
 
         # авторы, у которых самая большая разница между их самой старой и самой новой книге
@@ -80,29 +83,87 @@ def main():
         print("\nтоп авторов по продолжительности издательской карьеры:\n",
               long_career_authors.to_string(index=False))
 
-        # авторы с 80% всех переизданий
-        author_abc = df.groupby('author')['edition_count'].sum().reset_index()
-        author_abc = author_abc.sort_values(by='edition_count', ascending=False).reset_index(drop=True)
+        # группируем суммарные переиздания по авторам
+        author_stats = df.groupby('author')['edition_count'].sum().reset_index()
 
-        # кумулятивная сумма переизданий
-        author_abc['cum_editions'] = author_abc['edition_count'].cumsum()
-        total_editions = author_abc['edition_count'].sum()
+        # порог для попадания в ТОП-10%
+        top_10_threshold = author_stats['edition_count'].quantile(0.90)
 
-        if total_editions > 0:
-            author_abc['cum_percentage'] = (author_abc['cum_editions'] / total_editions) * 100
-        else:
-            author_abc['cum_percentage'] = 0
-
-        author_abc['abc_class'] = pd.cut(
-            author_abc['cum_percentage'], bins=[0, 80, 95, 100.1], labels=['A', 'B', 'C'], include_lowest=True
+        # делим авторов на 2 группы
+        author_stats['author_group'] = author_stats['edition_count'].apply(
+            lambda x: 'ТОП-10% авторов' if x >= top_10_threshold else 'Остальные 90%'
         )
 
-        abc_summary = author_abc.groupby('abc_class', observed=False).agg(
+        # сводный анализ
+        concentration_summary = author_stats.groupby('author_group').agg(
             authors_count=('author', 'count'),
             total_editions=('edition_count', 'sum')
         ).reset_index()
 
-        print("\nу кого из авторов основной объем переизданий:\n", abc_summary.to_string(index=False))
+        # доли в процентах
+        total_editions = concentration_summary['total_editions'].sum()
+        total_authors = concentration_summary['authors_count'].sum()
+
+        concentration_summary['authors_share_%'] = (concentration_summary['authors_count'] / total_authors * 100).round(
+            1)
+        concentration_summary['editions_share_%'] = (
+                    concentration_summary['total_editions'] / total_editions * 100).round(1)
+
+        print("\nконцентрация переизданий ТОП-10% авторов vs Остальные:\n",
+              concentration_summary.to_string(index=False))
+
+
+
+        # самые популярные классические книги
+        old_popular_books = (
+            session.query(
+                Book.title,
+                Book.author,
+                Book.year,
+                Book.edition_count
+            )
+            .filter(Book.year.isnot(None), Book.year > 0)
+            .order_by(desc(Book.edition_count), Book.year.asc())
+            .limit(5)
+            .all()
+        )
+
+        df_old_popular = pd.DataFrame(old_popular_books, columns=['название', 'автор', 'год', 'переизданий'])
+        print("\nТОП-5 самых популярной классики (ранний год + много изданий):\n", df_old_popular.to_string(index=False))
+
+
+        # авторы с наибольшим числом книг, у которых 1 издание
+        prolific_single_edition_authors = (
+            session.query(
+                Book.author,
+                func.count(Book.book_key).label('single_edition_books')
+            )
+            .filter(Book.edition_count == 1)
+            .group_by(Book.author)
+            .order_by(desc('single_edition_books'))
+            .limit(5)
+            .all()
+        )
+
+        df_single_edition = pd.DataFrame(prolific_single_edition_authors, columns=['автор', 'книг с 1 изданием'])
+        print("\nавторы с наибольшим числом книг, у которых 1 издание:\n", df_single_edition.to_string(index=False))
+
+
+        # среднее количество переизданий на одну книгу у ТОП-5 авторов
+        author_avg_editions = (
+            session.query(
+                Book.author,
+                func.count(Book.book_key).label('total_books'),
+                func.round(func.avg(Book.edition_count), 2).label('avg_editions_per_book')
+            )
+            .group_by(Book.author)
+            .order_by(desc('total_books'))
+            .limit(5)
+            .all()
+        )
+
+        df_avg_editions = pd.DataFrame(author_avg_editions, columns=['автор', 'всего книг', 'среднее изданий/книгу'])
+        print("\nсреднее количество переизданий на одну книгу у ТОП-5 авторов:\n", df_avg_editions.to_string(index=False))
 
 
 if __name__ == '__main__':
